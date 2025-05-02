@@ -1,283 +1,159 @@
-import { toast } from "sonner";
-import { User } from '../types/user';
-import { mockUser } from '../context/userReducer';
-import { ApiUrls, ApiKeys } from '@/config/api-config';
-//import { testPasswordChange } from '@/utils/testPasswordChange';
+import axios from 'axios';
+import { api } from './api';
 
-// Helper function to handle API responses
-const handleApiResponse = async (response: Response) => {
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: `Error ${response.status}` }));
-    throw new Error(errorData.message || `Error ${response.status}`);
-  }
-  return response.json();
+interface User {
+  id: string;
+  name: string;
+  email: string;
+}
+
+interface LoginResponse {
+  user: User;
+  token: string;
+}
+
+interface RegisterResponse {
+  user: User;
+  token: string;
+}
+
+const TOKEN_KEY = 'auth_token';
+const USER_KEY = 'user_data';
+
+// Helper functions for token management
+const setToken = (token: string) => {
+  localStorage.setItem(TOKEN_KEY, token);
+  // Set default Authorization header for all future requests
+  api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 };
 
-// Test function to check API connectivity
-export const testApiConnection = async (): Promise<boolean> => {
-  try {
-    // Try to fetch the base URL to check if the server is reachable
-    const response = await fetch(ApiUrls.baseUrl, {
-      method: 'GET',
-      mode: 'no-cors', // This might help bypass CORS issues for testing
-    });
-    
-    return true;
-  } catch (error) {
-    return false;
+const getToken = (): string | null => {
+  return localStorage.getItem(TOKEN_KEY);
+};
+
+const removeToken = () => {
+  localStorage.removeItem(TOKEN_KEY);
+  delete api.defaults.headers.common['Authorization'];
+};
+
+// Helper functions for user data management
+const setUserData = (user: User) => {
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+};
+
+const getUserData = (): User | null => {
+  const userData = localStorage.getItem(USER_KEY);
+  return userData ? JSON.parse(userData) : null;
+};
+
+const removeUserData = () => {
+  localStorage.removeItem(USER_KEY);
+};
+
+// Initialize axios with token if it exists
+const initializeAuth = () => {
+  const token = getToken();
+  if (token) {
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
   }
 };
 
-/**
- * Logs in a user with email/phone and password
- * Uses the live API without fallback to demo mode
- */
-export const loginUser = async (identifier: string, password: string): Promise<User | null> => {
-  try {
-    const jsonPayload = {
-      [ApiKeys.userId]: identifier,
-      [ApiKeys.password]: password
-    };
-    
-    const response = await fetch(`/api/${ApiUrls.login}`, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(jsonPayload),
-      credentials: 'include'  // Added credentials
-    });
+// Call this when the app starts
+initializeAuth();
 
-    const data = await response.json();
-    
-    if (!response.ok) {
-      throw new Error(data.msg || `API error: ${response.status}`);
-    }
-    
-    if (data.code === '200' && data.msg === 'Login Successfully') {
-      const userData: User = {
-        id: data.userId,
-        name: data.name,
-        email: data.email,
-        phone: data.phone,
-        addresses: data.addresses || [],
-        token: data.token
-      };
+export const authService = {
+  // Get the current user from local storage or API
+  getCurrentUser: async (): Promise<User | null> => {
+    try {
+      const userData = getUserData();
       
-      if (data.token) {
-        localStorage.setItem('auth_token', data.token);
+      // If we have a token, verify it's still valid by making an API call
+      if (getToken()) {
+        const response = await api.get('/auth/me');
+        const updatedUser = response.data.user;
+        setUserData(updatedUser);
+        return updatedUser;
       }
       
       return userData;
+    } catch (error) {
+      // If the token is invalid or expired, clear auth data
+      removeToken();
+      removeUserData();
+      return null;
     }
-    
-    return null;
-  } catch (error) {
-    throw error;
-  }
-};
+  },
 
-/**
- * Registers a new user with the provided details
- * Uses the live API without fallback to demo mode
- */
-export const registerUser = async (name: string, email: string, phone: string, password: string): Promise<boolean> => {
-  try {
-    const jsonPayload = {
-      [ApiKeys.name]: name,
-      [ApiKeys.email]: email,
-      [ApiKeys.phone]: phone,
-      [ApiKeys.password]: password,
-      [ApiKeys.fcmToken]: "",
-      device_type: "web"
-    };
-    
-    const response = await fetch(`/api/${ApiUrls.signUp}`, {  // Changed to use proxy
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(jsonPayload),
-      credentials: 'include'  // Added credentials
+  // Login user
+  login: async (email: string, password: string): Promise<User> => {
+    try {
+      const response = await api.post<LoginResponse>('/auth/login', {
+        email,
+        password,
+      });
+      
+      const { user, token } = response.data;
+      
+      setToken(token);
+      setUserData(user);
+      
+      return user;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Register new user
+  register: async (name: string, email: string, password: string): Promise<User> => {
+    try {
+      const response = await api.post<RegisterResponse>('/auth/register', {
+        name,
+        email,
+        password,
+      });
+      
+      const { user, token } = response.data;
+      
+      setToken(token);
+      setUserData(user);
+      
+      return user;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Logout user
+  logout: async (): Promise<void> => {
+    try {
+      // Call logout endpoint if your API has one
+      if (getToken()) {
+        await api.post('/auth/logout');
+      }
+    } catch (error) {
+      console.error('Logout API error:', error);
+    } finally {
+      // Always clear local auth data
+      removeToken();
+      removeUserData();
+    }
+  },
+
+  // Request password reset
+  forgotPassword: async (email: string): Promise<void> => {
+    await api.post('/auth/forgot-password', { email });
+  },
+
+  // Reset password with token
+  resetPassword: async (token: string, newPassword: string): Promise<void> => {
+    await api.post('/auth/reset-password', {
+      token,
+      password: newPassword,
     });
+  },
 
-    const data = await response.json();
-    return response.ok && data.code === '200';
-  } catch (error) {
-    throw error;
-  }
+  // Check if user is authenticated
+  isAuthenticated: (): boolean => {
+    return !!getToken();
+  },
 };
-
-export const changeUserPassword = async (oldPassword: string, newPassword: string): Promise<boolean> => {
-  try {
-    // Get current user data and token
-    const token = localStorage.getItem('auth_token');
-    
-    if (!token) {
-      toast.error("Authentication token not found. Please log in again.");
-      return false;
-    }
-
-    const response = await fetch('/api/changePassword.php', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        oldPassword: oldPassword,
-        newPassword: newPassword
-      })
-    });
-
-    const data = await response.json();
-    
-    // Check for specific error messages related to incorrect password
-    if (data.msg && (
-      data.msg.toLowerCase().includes('incorrect') || 
-      data.msg.toLowerCase().includes('wrong') || 
-      data.msg.toLowerCase().includes('invalid') ||
-      data.msg.toLowerCase().includes('current password') ||
-      data.msg.toLowerCase().includes('old password')
-    )) {
-      toast.error("Incorrect current password. Please enter the correct password.");
-      return false;
-    }
-    
-    if (!response.ok) {
-      throw new Error(data.msg || `API error: ${response.status}`);
-    }
-    
-    // Check for success in different response formats
-    if (data.status === 'success' || data.code === '200' || data.msg === 'Password Changed Successfully' || data.msg === 'Password Change Successfully') {
-      toast.success("Password changed successfully");
-      return true;
-    } else {
-      throw new Error(data.message || data.msg || 'Failed to change password');
-    }
-    
-  } catch (error) {
-    toast.error(error instanceof Error ? error.message : "Failed to change password");
-    return false;
-  }
-};
-
-export const deleteUserAccount = async (): Promise<boolean> => {
-  try {
-    // Get current user data and token
-    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-    const token = localStorage.getItem('auth_token');
-    
-    if (!currentUser.id) {
-      throw new Error('User ID not found');
-    }
-
-    const response = await fetch(`/api/${ApiUrls.deleteAccount}`, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': token ? `Bearer ${token}` : '',
-      },
-      body: JSON.stringify({
-        userId: currentUser.id,
-        parem: "1"  // Adding this parameter as seen in other API calls
-      }),
-      credentials: 'include'
-    });
-
-    const data = await response.json();
-    
-    if (!response.ok) {
-      throw new Error(data.msg || `API error: ${response.status}`);
-    }
-    
-    // Clear local storage after successful deletion
-    localStorage.clear();
-    return true;
-    
-  } catch (error) {
-    throw error;
-  }
-};
-
-export const updateUserProfile = async (userData: Partial<User>): Promise<User | null> => {
-  try {
-    // Get auth token
-    const token = localStorage.getItem('auth_token');
-    if (!token) {
-      throw new Error('Authentication token not found');
-    }
-
-    // Get current user data
-    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-
-    // Create the JSON payload
-    const jsonPayload = {
-      userId: currentUser.id,
-      name: userData.name || currentUser.name,
-      email: userData.email || currentUser.email,
-      phone: userData.phone || currentUser.phone,
-      parem: "1",
-      addresses: userData.addresses || currentUser.addresses,
-      device_type: "web",
-      FCMToken: ""
-    };
-
-    const response = await fetch(`/api/${ApiUrls.editProfile}`, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(jsonPayload),
-      credentials: 'include'
-    });
-
-    const data = await response.json();
-
-    if (data.code === '200') {
-      // Create updated user object
-      const updatedUser: User = {
-        ...currentUser,
-        ...userData,
-        id: data.userId || currentUser.id,
-        addresses: userData.addresses || currentUser.addresses
-      };
-
-      // Update localStorage
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      return updatedUser;
-    } else {
-      throw new Error(data.msg || 'Failed to update profile');
-    }
-  } catch (error) {
-    throw error;
-  }
-};
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
