@@ -201,7 +201,7 @@ export const getOrders = async (): Promise<OrderHistoryItem[]> => {
     formData.append('userId', currentUser.id);
     formData.append('phone', currentUser.phone);
     
-    const response = await fetch(`${ApiUrls.baseUrl}${ApiUrls.apiPath}${ApiUrls.getOrders}`, {
+    const response = await fetch(`${ApiUrls.baseUrl}${ApiUrls.getOrders}`, {
       method: 'POST',
       body: formData,
       headers: {

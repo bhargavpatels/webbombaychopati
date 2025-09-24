@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { CartProvider } from "@/context/CartContext";
 import { UserProvider } from "@/context/user/UserProvider";
 import { AuthProvider } from "@/context/AuthContext";
+import { FavoritesProvider } from "@/context/FavoritesContext";
 import Index from "./pages/Index";
 import Products from "./pages/Products";
 import Cart from "./pages/Cart";
@@ -44,7 +45,8 @@ const App = () => (
       <AuthProvider>
         <UserProvider>
           <CartProvider>
-            <BrowserRouter>
+            <FavoritesProvider>
+              <BrowserRouter>
               <ScrollToTop />
               <Toaster />
               <Sonner />
@@ -76,7 +78,8 @@ const App = () => (
                 
                 <Route path="*" element={<NotFound />} />
               </Routes>
-            </BrowserRouter>
+              </BrowserRouter>
+            </FavoritesProvider>
           </CartProvider>
         </UserProvider>
       </AuthProvider>

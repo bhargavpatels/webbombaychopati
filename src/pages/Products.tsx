@@ -5,7 +5,8 @@ import Footer from '@/components/Footer';
 import ProductCard from '@/components/ProductCard';
 import { getProducts, getCategories } from '@/services/productApi';
 import { Product } from '@/types/product';
-import { Search, X } from 'lucide-react';
+import { Search, X, Heart } from 'lucide-react';
+import { useFavorites } from '@/context/FavoritesContext';
 
 // Category display mapping
 const categoryDisplayNames: Record<string, string> = {
@@ -19,6 +20,8 @@ const Products = () => {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
+  const { favoriteIds } = useFavorites();
 
   // Scroll to top when component mounts
   useEffect(() => {
@@ -45,12 +48,12 @@ const Products = () => {
       const filtered = products.filter((product) => {
         const matchesQuery = product.name.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesCategory = selectedCategory ? product.category === selectedCategory : true;
-        return matchesQuery && matchesCategory;
+        const matchesFavorites = showOnlyFavorites ? favoriteIds.includes(product.id) : true;
+        return matchesQuery && matchesCategory && matchesFavorites;
       });
-      
       setFilteredProducts(filtered);
     }
-  }, [searchQuery, selectedCategory, products]);
+  }, [searchQuery, selectedCategory, products, showOnlyFavorites, favoriteIds]);
 
   const clearSearch = () => {
     setSearchQuery('');
@@ -102,6 +105,16 @@ const Products = () => {
               </div>
               
               <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hidden">
+                <button
+                  onClick={() => setShowOnlyFavorites((s) => !s)}
+                  className={`px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-colors flex items-center gap-2 ${
+                    showOnlyFavorites ? 'bg-brand-pink text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                  title={showOnlyFavorites ? 'Showing favorites' : 'Show favorites'}
+                >
+                  <Heart size={16} className={showOnlyFavorites ? 'text-white' : 'text-brand-pink'} />
+                  Favorites
+                </button>
                 <button
                   onClick={() => setSelectedCategory("IceCreame")}
                   className={`px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-colors ${
@@ -179,6 +192,7 @@ const Products = () => {
                 onClick={() => {
                   setSearchQuery('');
                   setSelectedCategory(null);
+                  setShowOnlyFavorites(false);
                 }}
                 className="px-4 py-2 bg-brand-pink text-white rounded-md hover:bg-opacity-90 transition-colors"
               >

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useCart } from '@/context/CartContext';
 import { Product } from '@/types/product';
-import { Check, Plus, Minus } from 'lucide-react';
+import { Check, Plus, Minus, Heart } from 'lucide-react';
 import QuantitySelector from './QuantitySelector';
+import { useFavorites } from '@/context/FavoritesContext';
 
 interface ProductCardProps {
   product: Product;
@@ -12,6 +13,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const [selectedSize, setSelectedSize] = useState(product.sizes[0]);
   const [isAdding, setIsAdding] = useState(false);
   const { addToCart, cartItems, isWholesale, increaseQuantity, decreaseQuantity } = useCart();
+  const { isFavorite, toggleFavorite } = useFavorites();
 
   // Check if this is a 5 liter product that's eligible for wholesale pricing
   const sizeNum = parseFloat(selectedSize.size);
@@ -83,6 +85,23 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   return (
     <div className="bg-white rounded-xl overflow-hidden product-shadow animate-fade-in">
       <div className="relative group">
+        <button
+          aria-label={isFavorite(product.id) ? 'Remove from favorites' : 'Add to favorites'}
+          onClick={(e) => { 
+            e.stopPropagation(); 
+            console.log('Toggling favorite for product:', product.id, 'Current state:', isFavorite(product.id));
+            toggleFavorite(product.id); 
+          }}
+          className="absolute top-2 right-2 z-20 p-2 rounded-full bg-white/90 shadow hover:bg-white transition-all duration-200 hover:scale-110"
+        >
+          <Heart
+            size={20}
+            className={`transition-colors duration-200 ${
+              isFavorite(product.id) ? 'text-brand-pink' : 'text-gray-400 hover:text-brand-pink'
+            }`}
+            fill={isFavorite(product.id) ? 'currentColor' : 'none'}
+          />
+        </button>
         {isAllSizesOutOfStock && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
             <span className="text-white font-bold text-lg">Out of Stock</span>
