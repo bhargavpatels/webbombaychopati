@@ -21,10 +21,12 @@ const adaptProduct = (product: any): Product => {
     description: product.description,
     category: product.category,
     image: product.image,
-    sizes: product.sizes.map((size: any) => ({
-      size: size.name || "Regular",
-      price: size.price
-    }))
+    sizes: (product.sizes && Array.isArray(product.sizes)) 
+      ? product.sizes.map((size: any) => ({
+          size: size.name || "Regular",
+          price: size.price
+        }))
+      : [{ size: "Regular", price: 0 }]
   };
 };
 
